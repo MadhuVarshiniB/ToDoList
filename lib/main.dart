@@ -1,114 +1,166 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'models/todos_model.dart';  // Your task provider
+import 'models/task.dart';
+import 'pages/TaskDetailsPage.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  Hive.registerAdapter(TaskAdapter());
+  await Hive.openBox<Task>('tasks');
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final todosModel = TodosModel();
+  await todosModel.init();
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => todosModel,  // <-- Use the initialized object here
+      child: MaterialApp(
+        home: ToDoApp(),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
+    ),
+  );
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+class ToDoApp extends StatelessWidget{
+  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
 
-  final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
+    Widget build(BuildContext context) {
+      final todosModel = Provider.of<TodosModel>(context);
+      return Scaffold(
+        appBar: AppBar(title: Text('Tasks'),),
+        body: Consumer<TodosModel>(
+          builder: (context,todosModel,child){
+            return AnimatedList(
+              key: _listKey,
+              initialItemCount: todosModel.tasks.length,
+              itemBuilder: (context, index, animation){
+                final task = todosModel.tasks[index];
+                return FadeTransition(
+                  opacity: animation,
+                  child: ListTile(
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+                    title: Text(task.title),
+                    leading: InkWell(
+                      onTap: () {
+                        todosModel.deleteTask(task);
+                        _listKey.currentState?.removeItem(
+                          index,
+                              (context, animation) => SizeTransition(
+                            sizeFactor: animation,
+                          ),
+                        );
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+                        // Delete on circle tap
+                      },
+                      customBorder: const CircleBorder(),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 2),
+                        ),
+                        width: 24,
+                        height: 24,
+                        child: const Icon(Icons.check, size: 16, color: Colors.red),
+                      ),
+                    ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TaskDetailsPage(task: task),
+                          ),
+                        );
+                      }
+                  ),
+                );
+              }
+            );
+          },
+        ),
+        floatingActionButton: FloatingActionButton(
+          child: Icon(Icons.add),
+          onPressed: () => _showAddTaskModal(context),
+        ),
+
+
+      );
+
+
+    }
+
+  void _showAddTaskModal(BuildContext context) {
+    final TextEditingController _taskController = TextEditingController();
+    final FocusNode _taskFocusNode = FocusNode();
+
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Allows modal to resize when keyboard appears
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          // Push up by keyboard height
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Fit height to content
+            children: [
+              TextField(
+                controller: _taskController,
+                focusNode: _taskFocusNode,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Enter new task',
+                  border: OutlineInputBorder(),
+                ),
+                // Pressing enter adds the task immediately
+                onSubmitted: (_) =>
+                    _addTask(context, _taskController,_taskFocusNode),
+              ),
+              const SizedBox(height: 10),
+              ElevatedButton(
+                onPressed: () => _addTask(context, _taskController,_taskFocusNode),
+                child: const Text("Add Task"),
+              ),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      // Dispose controllers/focus nodes when modal closes
+      _taskController.dispose();
+      _taskFocusNode.dispose();
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
-  }
+  /// Adds the task to the list and closes the modal
+  void _addTask(BuildContext context, TextEditingController controller,FocusNode focusNode) {
+    final text = controller.text.trim();
+    if (text.isNotEmpty) {
+      final todosModel = Provider.of<TodosModel>(context, listen: false);
+      todosModel.addTask(Task(title: text));
+      _listKey.currentState?.insertItem(0);
+      controller.clear();           // Clear text
+      focusNode.requestFocus();
+
+      //Navigator.of(context).pop(); // Close the modal
+    }
 }
+
+}
+
