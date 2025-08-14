@@ -121,44 +121,59 @@ class ToDoApp extends StatelessWidget {
           },
         ),
               );
-            }
-            }
+  }
+}
 
-class TasksPage extends StatefulWidget{
+class TasksPage extends StatefulWidget {
   @override
   TasksPageState createState() => TasksPageState();
 }
 
 class TasksPageState extends State<TasksPage> {
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+  final List<Task> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final todosModel = Provider.of<TodosModel>(context, listen: false);
+
+    // Load existing tasks (newest first)
+    _items.addAll(todosModel.tasks);
+
+    // Listen for item changes and animate
+    todosModel.addListener(() {
+      final updatedList = todosModel.tasks;
+      // If new task added at top
+      if (updatedList.length > _items.length) {
+        final newTask = updatedList.first;
+        _items.insert(0, newTask);
+        _listKey.currentState?.insertItem(0, duration: Duration(milliseconds: 300));
+      }
+    });
+  }
 
   void _showAddTaskModal(BuildContext context) {
     final TextEditingController _taskController = TextEditingController();
     final FocusNode _taskFocusNode = FocusNode();
 
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      // Allows modal to resize when keyboard appears
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         return Padding(
-          // Push up by keyboard height
           padding: EdgeInsets.only(
-            bottom: MediaQuery
-                .of(ctx)
-                .viewInsets
-                .bottom + 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
             left: 20,
             right: 20,
             top: 20,
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min, // Fit height to content
+            mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: _taskController,
@@ -168,14 +183,11 @@ class TasksPageState extends State<TasksPage> {
                   labelText: 'Enter new task',
                   border: OutlineInputBorder(),
                 ),
-                // Pressing enter adds the task immediately
-                onSubmitted: (_) =>
-                    _addTask(context, _taskController, _taskFocusNode,),
+                onSubmitted: (_) => _addTask(context, _taskController, _taskFocusNode),
               ),
               const SizedBox(height: 10),
               ElevatedButton(
-                onPressed: () =>
-                    _addTask(context, _taskController, _taskFocusNode,),
+                onPressed: () => _addTask(context, _taskController, _taskFocusNode),
                 child: const Text("Add Task"),
               ),
             ],
@@ -183,126 +195,155 @@ class TasksPageState extends State<TasksPage> {
         );
       },
     ).whenComplete(() {
-      // Dispose controllers/focus nodes when modal closes
       _taskController.dispose();
       _taskFocusNode.dispose();
     });
   }
 
-
-  void addTaskWithAnimation(Task task,BuildContext context) {
-    Provider.of<TodosModel>(context, listen: false).addTaskAt(0,task);
-    _listKey.currentState?.insertItem(0, duration: const Duration(milliseconds: 500)); // Assuming added at the start
+  void _addTask(BuildContext context, TextEditingController controller, FocusNode focusNode) {
+    final text = controller.text.trim();
+    if (text.isNotEmpty) {
+      Provider.of<TodosModel>(context, listen: false).addTask(Task(title: text));
+      controller.clear();
+      focusNode.requestFocus();
+    }
   }
 
-
-
-
-/// Adds the task to the list and closes the modal
-void _addTask(BuildContext context, TextEditingController controller,
-    FocusNode focusNode) {
-  final text = controller.text.trim();
-  if (text.isNotEmpty) {
-    final todosModel = Provider.of<TodosModel>(context, listen: false);
-    //final newTask=Task(title: text);
-    //todosModel.addTaskAt(0, Task(title: text));
-    todosModel.addTask(Task(title: text));
-    _listKey.currentState?.insertItem(0, duration: Duration(milliseconds: 500));
-    //pageKey.currentState?.addTaskWithAnimation(newTask,context);
-    controller.clear(); // Clear text
-    focusNode.requestFocus();
-
-    //Navigator.of(context).pop(); // Close the modal
+  void _removeTask(int index, Task task) {
+    Provider.of<TodosModel>(context, listen: false).deleteTask(task);
+    final removedItem = _items.removeAt(index);
+    _listKey.currentState?.removeItem(
+      index,
+          (context, animation) => _buildItem(removedItem, animation),
+      duration: Duration(milliseconds: 300),
+    );
   }
-}
 
+  Widget _buildItem(Task task, Animation<double> animation, {int? index}) {
+    return FadeTransition(
+      opacity: animation,
+      child: SizeTransition(
+        sizeFactor: animation,
+        child:Container(
+          margin: const EdgeInsets.symmetric(vertical: 4.0),
+          decoration: BoxDecoration(
+            color: Color(0xFFCBB7CB), // ✅ background color#D8BFD8
+            border: Border.all(color: Color(0xFFAF80AF), width: 2), // ✅ border
+            borderRadius: BorderRadius.circular(10), // ✅ rounded corners
+          ),
+          child: ListTile(
+            title: Text(task.title),
+            leading: InkWell(
+              onTap: () {
+                if (index != null) {
+                  task.isCompleted = true;
+
+                }
+                Future.delayed(const Duration(milliseconds: 200), () {
+                  _removeTask(index!, task);
+                });
+              },
+              customBorder: const CircleBorder(),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all( color: task.isCompleted ? Colors.black12 : Colors.black,
+                    width: 2,),
+                  color: task.isCompleted ? Colors.purple.withOpacity(0.2) : Colors.transparent,
+                ),
+
+                width: 24,
+                height: 24,
+                child: task.isCompleted
+                    ? const Icon(Icons.check, size: 16, color: Colors.deepPurple)
+                    : null,
+              ),
+            ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TaskDetailsPage(task: task),
+                ),
+              );
+            },
+          ),
+          ),
+        )
+      );
+
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Consumer<TodosModel>(
-        builder: (context, todosModel, child) {
-          return AnimatedList(
-            key: _listKey,
-            initialItemCount: todosModel.tasks.length,
-            itemBuilder: (context, index, animation) {
-              final task = todosModel.tasks[index];
-              return FadeTransition(
-                opacity: animation,
-                child: ListTile(
-                  title: Text(task.title),
-                  leading: InkWell(
-                      onTap: () {
-                        todosModel.deleteTask(task);
-                        _listKey.currentState?.removeItem(
-                          index,
-                              (context, animation) =>
-                              SizeTransition(
-                                sizeFactor: animation,
-                                child: ListTile( // Or your actual list item widget
-                                  title: Text(task.title),
-                                  leading: InkWell( // Replicate the leading part for consistent animation
-                                    customBorder: const CircleBorder(),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: Colors.black, width: 2),
-                                      ),
-                                      width: 24,
-                                      height: 24,
-                                      child: const Icon(Icons.check, size: 16,
-                                          color: Colors.grey),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          duration: Duration(milliseconds: 100),
-                        );
-                      },
-                      customBorder: const CircleBorder(),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.black, width: 2),
-                        ),
-                        width: 24,
-                        height: 24,
-                        child: const Icon(Icons.check, size: 16, color: Colors
-                            .red),
-                      )
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => TaskDetailsPage(task: task),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-
-          );
-        },
+      appBar: AppBar(
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Tasks'),
+        ),              // Optional: center the title
+        //backgroundColor: Colors.blue,   // Optional: change background color
 
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _showAddTaskModal(context);
+      drawer: Drawer(  // <-- The side navigation panel
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.purple,
+                gradient: LinearGradient(
+                  colors: [Colors.purple, Colors.blue],
+                ),
+              ),
+              child: Text(
+                'TO DO APP',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.calendar_month_rounded),
+              title: Text('Habit Tracker'),
+              onTap: () {
+                // Navigate to home or close drawer
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.timer),
+              title: Text('Time Tracker'),
+              onTap: () {
+                // Navigate to settings or close drawer
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.settings),
+              title: Text('Settings'),
+              onTap: () {
+                // Navigate to settings or close drawer
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+      body: AnimatedList(
+        key: _listKey,
+        initialItemCount: _items.length,
+        itemBuilder: (context, index, animation) {
+          final task = _items[index];
+          return _buildItem(task, animation, index: index);
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddTaskModal(context),
         child: const Icon(Icons.add),
       ),
     );
   }
 }
-
-
-
-
-
-
-
-
-

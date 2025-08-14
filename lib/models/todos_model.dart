@@ -1,28 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'task.dart';
+import 'dart:collection';
 
 class TodosModel extends ChangeNotifier {
   late Box<Task> _taskBox;
+  List<Task> _internalTasks = [];
 
-  List<Task> get tasks => _taskBox.values.toList();
+
 
   // Initialize Hive box
   Future<void> init() async {
     _taskBox = await Hive.openBox<Task>('tasks');
-    notifyListeners();
+    _loadTasksFromHive();
+    //notifyListeners();
+  }
+  void _loadTasksFromHive(){
+  _internalTasks = _taskBox.values.toList().reversed.toList();
+  notifyListeners();
   }
 
-  Future<void> addTaskAt(int index, Task task) async {
+  List<Task> get tasks => UnmodifiableListView(_internalTasks);
+
+
+  Future<void> addTaskToTop(int index, Task task) async {
     // ... Hive saving logic ...
     await Hive.box<Task>('tasks').add(task); // Or put with a key
-    tasks.insert(index, task);
+    _internalTasks.insert(0, task);
     notifyListeners();
   }
 
   void addTask(Task task)async {
     await Hive.box<Task>('tasks').add(task);
-    tasks.insert(0, task);
+    _internalTasks.insert(0, task);
     notifyListeners();
   }
 
@@ -34,6 +44,7 @@ class TodosModel extends ChangeNotifier {
 
   void deleteTask(Task task) {
     task.delete();
+    _internalTasks.remove(task);
     notifyListeners();
   }
 
@@ -55,3 +66,4 @@ class TodosModel extends ChangeNotifier {
   }
 
 }
+
