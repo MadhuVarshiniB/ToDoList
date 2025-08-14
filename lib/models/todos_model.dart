@@ -13,9 +13,16 @@ class TodosModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> addTaskAt(int index, Task task) async {
+    // ... Hive saving logic ...
+    await Hive.box<Task>('tasks').add(task); // Or put with a key
+    tasks.insert(index, task);
+    notifyListeners();
+  }
 
-  void addTask(Task task) {
-    _taskBox.add(task);
+  void addTask(Task task)async {
+    await Hive.box<Task>('tasks').add(task);
+    tasks.insert(0, task);
     notifyListeners();
   }
 

@@ -13,9 +13,13 @@ class Task extends HiveObject {
   @HiveField(2)
   DateTime? completedAt;
 
+  @HiveField(3)
+  DateTime? createdAt;
+
   Task({
     required this.title,
     this.isCompleted = false,
-    this.completedAt
+    this.completedAt,
+    this.createdAt
   });
 }
